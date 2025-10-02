@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Airport Wheel of Fortune — UAE | Qatar | Oman</title>
+<style>
+  :root{
+    --bg:#0B1C26; --card:#152A36; --gold:#E2B714; --accent-red:#E63946;
+    --muted:#93A6B3; --panel:#1D3557; --text:#E7F0F4;
+  }
+  html, body{margin:0;padding:0;height:100%;overflow-y:auto;background:#0B1C26;}
+  body{font-family:sans-serif;color:var(--text);display:flex;flex-direction:column;align-items:center;position:relative;}
+  canvas#bg-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;}
+  .card{position:relative;z-index:1;width:90%;max-width:700px;background:var(--card);border-radius:14px;padding:22px;text-align:center;margin:20px 0;box-shadow:0 0 30px #0005;}
+  .logo{max-width:180px;margin-bottom:10px;}
+  h1{margin:0;font-size:22px;color:var(--gold);}
+  .wheel-wrapper{position:relative;display:flex;align-items:center;justify-content:center;margin:20px auto 40px auto;}
+  .wheel-viewport{width:360px;height:360px;border-radius:50%;overflow:hidden;position:relative;}
+  .pointer{position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;
+    border-left:15px solid transparent;border-right:15px solid transparent;border-top:25px solid var(--accent-red);z-index:2;}
+  button{cursor:pointer;padding:10px 14px;border-radius:10px;font-weight:600;border:0}
+  .controls{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .btn-spin{background:var(--gold);color:#000}
+  .btn-reset{background:transparent;color:var(--muted);border:1px solid #333}
+  .airport-row{display:flex;justify-content:space-between;align-items:center;
+    padding:6px 10px;background:var(--panel);border-radius:6px;margin-bottom:4px;font-size:13px;transition:background .3s}
+  .airport-row.highlight{background:#E2B71433}
+  .airport-row:hover{background:#E2B71422;}
+  .spin-small{padding:4px 6px;border-radius:5px;background:#0001;color:var(--accent-red);border:1px solid #444;font-size:12px}
+  .result{margin-top:14px;display:inline-flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:#1115;animation:fadeIn 0.6s ease forwards;}
+  .result .code{font-weight:700;color:var(--gold);}
+  .flag-img{width:18px;height:12px;vertical-align:middle;margin-right:4px;border-radius:2px;}
+  @keyframes highlightSlice {
+    0% { stroke-width:3; stroke:#E2B714; }
+    50% { stroke-width:6; stroke:#FFD700; }
+    100% { stroke-width:3; stroke:#E2B714; }
+  }
+  @keyframes fadeIn {
+    0% { opacity:0; transform: translateY(-10px);}
+    100% { opacity:1; transform: translateY(0);}
+  }
+  @keyframes arrowBounce {
+    0% { transform: translateX(-50%) rotate(0deg);}
+    25% { transform: translateX(-50%) rotate(-15deg);}
+    50% { transform: translateX(-50%) rotate(10deg);}
+    75% { transform: translateX(-50%) rotate(-7deg);}
+    100% { transform: translateX(-50%) rotate(0deg);}
+  }
+  .wheel-viewport svg path:hover{filter: brightness(1.2);}
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+
+<img class="logo" src="https://arabian-vacc.com/logo.png" alt="Arabian Vacc Logo">
+
+<div class="card">
+  <h1>Airport Wheel of Fortune</h1>
+
+  <div class="wheel-wrapper">
+    <div class="pointer" id="pointer"></div>
+    <div class="wheel-viewport" id="wheel"></div>
+  </div>
+
+  <div class="controls">
+    <button id="spin-btn" class="btn-spin">Spin</button>
+    <button id="reset-btn" class="btn-reset">Reset</button>
+  </div>
+
+  <div id="info" style="margin-top:10px;color:var(--muted)">Press Spin or Space</div>
+  <div id="result"></div>
+
+  <h2 style="margin:22px 0 12px;color:var(--gold);font-size:18px">Airport List</h2>
+  <div id="list"></div>
+</div>
+
+<script>
+// --- AIRPORT DATA ---
+const AIRPORTS = [
+  { code: "DXB", name: "Dubai International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "DWC", name: "Al Maktoum International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "AUH", name: "Abu Dhabi Zayed International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "SHJ", name: "Sharjah International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "RKT", name: "Ras Al Khaimah International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "FJR", name: "Fujairah International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "AAN", name: "Al Ain International Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "AZI", name: "Al Bateen Executive Airport", country: "UAE", flag: "ae", color:"#00732F" },
+  { code: "DOH", name: "Hamad International Airport", country: "Qatar", flag: "qa", color:"#8D1B3D" },
+  { code: "MCT", name: "Muscat International Airport", country: "Oman", flag: "om", color:"#D62828" },
+  { code: "SLL", name: "Salalah International Airport", country: "Oman", flag: "om", color:"#D62828" },
+  { code: "DQM", name: "Duqm International Airport", country: "Oman", flag: "om", color:"#D62828" },
+  { code: "OHS", name: "Sohar Airport", country: "Oman", flag: "om", color:"#D62828" },
+  { code: "KHS", name: "Khasab Airport", country: "Oman", flag: "om", color:"#D62828" }
+];
+
+const shuffled = AIRPORTS.sort(()=>Math.random()-0.5);
+const wheelDiv = document.getElementById("wheel");
+const pointer = document.getElementById("pointer");
+const angle = 360/shuffled.length;
+const radius = 180;
+let spinning=false, finalRot=0;
+let sliceElems=[]; let listRows=[];
+
+// --- BUILD WHEEL WITH GRADIENT ---
+function buildWheel(){
+  const svgNS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(svgNS,"svg");
+  svg.setAttribute("viewBox","0 0 400 400");
+  const g=document.createElementNS(svgNS,"g");
+  g.setAttribute("transform","translate(200,200)");
+
+  shuffled.forEach((a,i)=>{
+    const start=(i*angle-90)*Math.PI/180;
+    const end=((i+1)*angle-90)*Math.PI/180;
+    const x1=Math.cos(start)*radius, y1=Math.sin(start)*radius;
+    const x2=Math.cos(end)*radius, y2=Math.sin(end)*radius;
+    const d=`M0 0 L${x1} ${y1} A${radius} ${radius} 0 0 1 ${x2} ${y2}Z`;
+
+    const path=document.createElementNS(svgNS,"path");
+    path.setAttribute("d",d);
+    path.setAttribute("stroke","#111");
+
+    // radial gradient glow
+    const grad = document.createElementNS(svgNS,"radialGradient");
+    const gradId = `grad${i}`;
+    grad.setAttribute("id",gradId);
+    grad.setAttribute("cx","50%"); grad.setAttribute("cy","50%"); grad.setAttribute("r","70%");
+    const stop1 = document.createElementNS(svgNS,"stop"); stop1.setAttribute("offset","0%"); stop1.setAttribute("stop-color",a.color); stop1.setAttribute("stop-opacity","0.8");
+    const stop2 = document.createElementNS(svgNS,"stop"); stop2.setAttribute("offset","100%"); stop2.setAttribute("stop-color",a.color); stop2.setAttribute("stop-opacity","1");
+    grad.appendChild(stop1); grad.appendChild(stop2); svg.appendChild(grad);
+    path.setAttribute("fill",`url(#${gradId})`);
+    g.appendChild(path);
+    sliceElems[i]=path;
+
+    const mid=(i+0.5)*angle-90;
+    const labelRadius = radius*0.65; 
+    const tx = Math.cos(mid*Math.PI/180) * labelRadius;
+    const ty = Math.sin(mid*Math.PI/180) * labelRadius;
+    const fo = document.createElementNS(svgNS,"foreignObject");
+    fo.setAttribute("x", tx - 30);
+    fo.setAttribute("y", ty - 10);
+    fo.setAttribute("width", 60);
+    fo.setAttribute("height", 20);
+    const div = document.createElement("div");
+    div.setAttribute("xmlns","http://www.w3.org/1999/xhtml");
+    div.style.fontSize="12px"; div.style.textAlign="center"; div.style.color="#fff"; div.style.fontWeight="bold"; div.style.whiteSpace="nowrap";
+    div.innerHTML=`<img src="https://flagcdn.com/w20/${a.flag}.png" class="flag-img"/> ${a.code}`;
+    fo.appendChild(div); g.appendChild(fo);
+  });
+
+  svg.appendChild(g);
+  const wrapper=document.createElement("div");
+  wrapper.style.width="100%";wrapper.style.height="100%";
+  wrapper.style.transition="transform 10s cubic-bezier(.08,.82,.18,1)";
+  wrapper.appendChild(svg);
+  wheelDiv.innerHTML="";wheelDiv.appendChild(wrapper);
+}
+buildWheel();
+
+// --- SPIN LOGIC ---
+function clearHighlights(){
+  sliceElems.forEach(p=>{p.setAttribute("stroke","#111"); p.setAttribute("stroke-width","1"); p.style.animation="";});
+  listRows.forEach(r=>r.classList.remove("highlight"));
+  pointer.style.animation="";
+}
+
+function spin(target=null){
+  if(spinning) return;
+  spinning=true;
+  clearHighlights();
+  const fullSpins = 8 + Math.floor(Math.random()*3);
+  const idx = target ?? Math.floor(Math.random()*shuffled.length);
+  const sliceMid = idx*angle + angle/2;
+  finalRot = fullSpins*360 - sliceMid;
+  const w = wheelDiv.firstElementChild;
+  w.style.transition = "transform 10s cubic-bezier(.08,.82,.18,1)";
+  w.style.transform = `rotate(${finalRot}deg)`;
+  setTimeout(()=>{spinning=false; showResult(idx); pointer.style.animation="arrowBounce 0.8s ease";},10100);
+}
+
+function showResult(i){
+  const a=shuffled[i];
+  document.getElementById("result").innerHTML=
+    `<div class='result'>
+      <img class="flag-img" src="https://flagcdn.com/w40/${a.flag}.png" alt="${a.country}"/>
+      <div class='code'>${a.code}</div><div>${a.name} — <small>${a.country}</small></div>
+    </div>`;
+  document.getElementById("info").textContent=`Landed on ${a.code}`;
+  const slice = sliceElems[i];
+  slice.setAttribute("stroke", "#E2B714");
+  slice.style.animation="highlightSlice 0.8s ease";
+  slice.setAttribute("stroke-width","3");
+  listRows[i].classList.add("highlight");
+}
+
+document.getElementById("spin-btn").onclick=()=>spin();
+document.getElementById("reset-btn").onclick=()=>{
+  if(spinning) return;
+  finalRot=0; clearHighlights();
+  wheelDiv.firstElementChild.style.transition="transform .6s";
+  wheelDiv.firstElementChild.style.transform="rotate(0deg)";
+  document.getElementById("result").innerHTML="";
+  document.getElementById("info").textContent="Press Spin or Space";
+};
+window.onkeydown=(e)=>{if(e.code==="Space"){e.preventDefault(); spin();}};
+
+// --- AIRPORT LIST ---
+const list=document.getElementById("list");
+shuffled.forEach((a,i)=>{
+  const row=document.createElement("div"); row.className="airport-row";
+  row.innerHTML=`<span><img class="flag-img" src="https://flagcdn.com/w40/${a.flag}.png" alt="${a.country}"/>${a.code} — ${a.name} — ${a.country}</span>`;
+  const btn=document.createElement("button"); btn.className="spin-small"; btn.textContent="Spin"; btn.onclick=()=>spin(i);
+  row.appendChild(btn); list.appendChild(row);
+  listRows[i]=row;
+});
+
+// --- DARK BACKGROUND ANIMATION ---
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
+let mouse = {x: width/2, y: height/2};
+window.addEventListener('resize',()=>{ width=canvas.width=window.innerWidth; height=canvas.height=window.innerHeight; });
+window.addEventListener('mousemove',(e)=>{ mouse.x=e.clientX; mouse.y=e.clientY; });
+const particles=[];
+for(let i=0;i<120;i++){ particles.push({x:Math.random()*width, y:Math.random()*height, r:Math.random()*2+1.2, dx:(Math.random()-0.5)*0.5, dy:(Math.random()-0.5)*0.5}); }
+function animate(){
+  ctx.fillStyle="#0B1C26"; ctx.fillRect(0,0,width,height);
+  for(let p of particles){
+    p.x += p.dx + (mouse.x-width/2)/700; p.y += p.dy + (mouse.y-height/2)/700;
+    if(p.x<0)p.x=width; if(p.x>width)p.x=0;
+    if(p.y<0)p.y=height; if(p.y>height)p.y=0;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle="rgba(226,183,20,0.5)"; ctx.fill();
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>
